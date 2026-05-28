@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Image
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
+import Video from 'react-native-video';
 import { theme } from '../theme';
 import { StorageService, Clip, Keyframe, AudioClip, TextOverlay } from '../services/StorageService';
 
@@ -178,6 +179,77 @@ const AudioClipBlockComponent = React.memo(({ audio, pxPerSecond }: AudioClipBlo
   );
 });
 
+interface VideoPlayerProps {
+  uri: string;
+  localTime: number;
+  isPlaying: boolean;
+  style: any;
+  speed?: number;
+}
+
+const VideoPlayer = ({ uri, localTime, isPlaying, style, speed = 1 }: VideoPlayerProps) => {
+  const videoRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!isPlaying && videoRef.current) {
+      videoRef.current.seek(localTime);
+    }
+  }, [localTime, isPlaying]);
+
+  return (
+    <Video
+      ref={videoRef}
+      source={{ uri }}
+      style={style}
+      resizeMode="contain"
+      paused={!isPlaying}
+      rate={speed}
+      muted={false}
+      volume={1.0}
+      playInBackground={false}
+      playWhenInactive={false}
+    />
+  );
+};
+
+interface BackgroundAudioPlayerProps {
+  uri: string;
+  startOffset: number;
+  duration: number;
+  currentTime: number;
+  isPlaying: boolean;
+}
+
+const BackgroundAudioPlayer = ({ uri, startOffset, duration, currentTime, isPlaying }: BackgroundAudioPlayerProps) => {
+  const audioRef = useRef<any>(null);
+  
+  const isActive = currentTime >= startOffset && currentTime <= startOffset + duration;
+  const audioLocalTime = Math.max(0, currentTime - startOffset);
+
+  useEffect(() => {
+    if (!isPlaying && audioRef.current) {
+      audioRef.current.seek(audioLocalTime);
+    }
+  }, [audioLocalTime, isPlaying]);
+
+  if (!isActive) return null;
+
+  return (
+    <Video
+      ref={audioRef}
+      source={{ uri }}
+      paused={!isPlaying}
+      muted={false}
+      volume={1.0}
+      playInBackground={false}
+      playWhenInactive={false}
+      style={{ width: 0, height: 0, position: 'absolute' }}
+    />
+  );
+};
+
+
+
 const VideoEditorScreen = () => {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
@@ -250,8 +322,7 @@ const VideoEditorScreen = () => {
           const totalVideo = clips.reduce((acc, c) => Math.max(acc, (c.startOffset || 0) + c.duration), 0);
           const totalAudio = audioClips.reduce((acc, a) => Math.max(acc, a.startOffset + a.duration), 0);
           const total = Math.max(totalVideo, totalAudio, 10);
-          if (prev >= total && total > 0) {
-            setIsPlaying(false);
+          if (prev >= total) {
             return total;
           }
           return prev + 0.1;
@@ -260,6 +331,18 @@ const VideoEditorScreen = () => {
     }
     return () => clearInterval(interval);
   }, [isPlaying, clips, audioClips]);
+
+  // Surveiller la fin de la lecture pour arrêter le timer
+  React.useEffect(() => {
+    if (isPlaying) {
+      const totalVideo = clips.reduce((acc, c) => Math.max(acc, (c.startOffset || 0) + c.duration), 0);
+      const totalAudio = audioClips.reduce((acc, a) => Math.max(acc, a.startOffset + a.duration), 0);
+      const total = Math.max(totalVideo, totalAudio, 10);
+      if (currentTime >= total) {
+        setIsPlaying(false);
+      }
+    }
+  }, [currentTime, isPlaying, clips, audioClips]);
 
   // Synchronisation ScrollView avec la lecture
   React.useEffect(() => {
@@ -566,10 +649,19 @@ const VideoEditorScreen = () => {
 
   // Audio Handler
   const handleAddAudio = (songName: string) => {
+    let uri = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+    if (songName === 'Summer Vibe Upbeat') {
+      uri = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3';
+    } else if (songName === 'Chill acoustic Guitar') {
+      uri = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3';
+    } else if (songName === 'Cyberpunk Synthwave') {
+      uri = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3';
+    }
+
     const newAudio: AudioClip = {
-      id: Date.now().toString(),
+      id: Date.now().toString() + '-' + Math.random().toString(),
       name: songName,
-      uri: 'mock_audio_uri',
+      uri: uri,
       duration: 15,
       startOffset: currentTime
     };
@@ -620,6 +712,18 @@ const VideoEditorScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Background Audio Players */}
+      {audioClips.map((audio) => (
+        <BackgroundAudioPlayer
+          key={audio.id}
+          uri={audio.uri}
+          startOffset={audio.startOffset}
+          duration={audio.duration}
+          currentTime={currentTime}
+          isPlaying={isPlaying}
+        />
+      ))}
+
       {/* En-tête (Header) */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -640,6 +744,59 @@ const VideoEditorScreen = () => {
               const clipLocal = Math.max(0, currentTime - (clip.startOffset || 0)) * (clip.speed || 1);
               const props = getInterpolatedProps(clip, clipLocal);
 
+              // Application des transitions réelles
+              let transOpacity = 1;
+              let transScale = 1;
+              let transX = 0;
+              let transY = 0;
+              let isGlitch = false;
+              let isBlur = false;
+
+              const idx = clips.indexOf(clip);
+              const isChannel0 = (clip.channel || 0) === 0;
+
+              if (isChannel0) {
+                const transitionDuration = 0.5; // durée de la transition (sec)
+                const clipEnd = (clip.startOffset || 0) + clip.duration;
+                
+                // 1. Transition de sortie (Fin du clip actuel)
+                if (clip.transition && clip.transition !== 'none' && clipEnd - currentTime <= transitionDuration && clipEnd - currentTime > 0) {
+                  const progress = (clipEnd - currentTime) / transitionDuration; // 1 -> 0
+                  if (clip.transition === 'fade') {
+                    transOpacity = progress;
+                  } else if (clip.transition === 'zoom') {
+                    transScale = 1 + (1 - progress) * 0.5;
+                  } else if (clip.transition === 'glitch') {
+                    isGlitch = true;
+                    transX = (Math.random() - 0.5) * 30;
+                    transY = (Math.random() - 0.5) * 30;
+                  } else if (clip.transition === 'blur') {
+                    isBlur = true;
+                    transOpacity = 0.3 + progress * 0.7;
+                  }
+                }
+                
+                // 2. Transition d'entrée (Début du clip actuel, héritée de la transition du clip précédent)
+                if (idx > 0) {
+                  const prevClip = clips[idx - 1];
+                  if (prevClip && prevClip.transition && prevClip.transition !== 'none' && currentTime - (clip.startOffset || 0) <= transitionDuration && currentTime - (clip.startOffset || 0) > 0) {
+                    const progress = (currentTime - (clip.startOffset || 0)) / transitionDuration; // 0 -> 1
+                    if (prevClip.transition === 'fade') {
+                      transOpacity = progress;
+                    } else if (prevClip.transition === 'zoom') {
+                      transScale = 1.5 - progress * 0.5;
+                    } else if (prevClip.transition === 'glitch') {
+                      isGlitch = true;
+                      transX = (Math.random() - 0.5) * 30;
+                      transY = (Math.random() - 0.5) * 30;
+                    } else if (prevClip.transition === 'blur') {
+                      isBlur = true;
+                      transOpacity = 0.3 + progress * 0.7;
+                    }
+                  }
+                }
+              }
+
               return (
                 <View 
                   key={clip.id}
@@ -653,20 +810,39 @@ const VideoEditorScreen = () => {
                     }, 
                     {
                       transform: [
-                        { scale: props.scale },
+                        { scale: props.scale * transScale },
                         { rotate: `${props.rotation}deg` },
-                        { translateX: props.x },
-                        { translateY: props.y }
+                        { translateX: props.x + transX },
+                        { translateY: props.y + transY }
                       ],
-                      opacity: props.opacity
+                      opacity: props.opacity * transOpacity
                     },
                     isSelected && { borderColor: theme.colors.primary, borderWidth: 1 }
                   ]}
                 >
                   {clip.type === 'image' ? (
-                    <Image source={{ uri: clip.uri }} style={styles.previewImage} resizeMode="contain" />
+                    <Image source={{ uri: clip.uri }} style={styles.previewImage} resizeMode="contain" blurRadius={isBlur ? 15 : undefined} />
                   ) : (
                     <View style={styles.videoPlayerContainer}>
+                      {/* Vrai Lecteur Vidéo de fond */}
+                      <VideoPlayer 
+                        uri={clip.uri}
+                        localTime={clipLocal}
+                        isPlaying={isPlaying}
+                        style={StyleSheet.absoluteFill}
+                        speed={clip.speed}
+                      />
+
+                      {/* Calque de Flou */}
+                      {isBlur && (
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.35)' }]} pointerEvents="none" />
+                      )}
+
+                      {/* Calque de Glitch */}
+                      {isGlitch && (
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 255, 230, 0.25)', zIndex: 10 }]} pointerEvents="none" />
+                      )}
+
                       {/* Grille de caméra */}
                       <View style={styles.cameraGridLineH} />
                       <View style={styles.cameraGridLineV} />
@@ -678,9 +854,11 @@ const VideoEditorScreen = () => {
                       </View>
 
                       {/* Icône play/pause centrale */}
-                      <View style={styles.centerPlayIconContainer}>
-                        <Text style={styles.centerPlayIcon}>{isPlaying ? '⏸' : '▶'}</Text>
-                      </View>
+                      {!isPlaying && (
+                        <View style={styles.centerPlayIconContainer}>
+                          <Text style={styles.centerPlayIcon}>▶</Text>
+                        </View>
+                      )}
 
                       {/* Titre et timecode en bas */}
                       <View style={styles.videoBottomInfo}>
@@ -816,14 +994,6 @@ const VideoEditorScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Règle temporelle graduée en haut */}
-        <View style={styles.timeRuler}>
-          <Text style={styles.rulerTime}>00:00</Text>
-          {clips.map((_, i) => (
-            <Text key={i} style={styles.rulerTime}>{`00:${(i + 1) * 5 < 10 ? '0' : ''}${(i + 1) * 5}`}</Text>
-          ))}
-        </View>
-
         {/* La piste de montage défilante */}
         {clips.length === 0 ? (
           // Timeline vide : Bouton d'ajout géant
@@ -844,61 +1014,72 @@ const VideoEditorScreen = () => {
             >
               <View style={styles.timelineMargin} />
 
-              <View style={[styles.tracksContainer, { width: Math.max(Dimensions.get('window').width, totalDuration * pxPerSecond) }]}>
-                {/* 1. PISTE VIDÉO SUPÉRIEURE (Canal 1 - Superposition) */}
-                <View style={[styles.videoTrackRow, { position: 'relative' }]}>
-                  {clips.filter(c => (c.channel || 0) === 1).map((clip) => (
-                    <VideoClipBlock
-                      key={clip.id}
-                      clip={clip}
-                      index={clips.indexOf(clip)}
-                      isActive={selectedClipIndex === clips.indexOf(clip)}
-                      pxPerSecond={pxPerSecond}
-                      onPress={(idx) => {
-                        setSelectedClipIndex(idx);
-                        setSelectedTextIndex(null);
-                      }}
-                      openTransitionMenu={openTransitionMenu}
-                      isLast={true}
-                      isAbsolute={true}
-                    />
-                  ))}
-                </View>
-
-                {/* 2. PISTE VIDÉO PRINCIPALE (Canal 0) */}
-                <View style={[styles.videoTrackRow, { position: 'relative', marginTop: 8 }]}>
-                  {clips.filter(c => (c.channel || 0) === 0).map((clip, index, arr) => (
-                    <VideoClipBlock
-                      key={clip.id}
-                      clip={clip}
-                      index={clips.indexOf(clip)}
-                      isActive={selectedClipIndex === clips.indexOf(clip)}
-                      pxPerSecond={pxPerSecond}
-                      onPress={(idx) => {
-                        setSelectedClipIndex(idx);
-                        setSelectedTextIndex(null);
-                      }}
-                      openTransitionMenu={openTransitionMenu}
-                      isLast={index === arr.length - 1}
-                      isAbsolute={true}
-                    />
-                  ))}
-                </View>
-
-                {/* 3. PISTE AUDIO DÉDIÉE (Waveform colorée mémoïsée) */}
-                <View style={styles.audioTrackRow}>
-                  {audioClips.map((audio) => (
-                    <AudioClipBlockComponent
-                      key={audio.id}
-                      audio={audio}
-                      pxPerSecond={pxPerSecond}
-                    />
-                  ))}
-                  {audioClips.length === 0 && (
-                    <Text style={styles.emptyAudioTrackText}>
-                      Aucune piste audio - Utilisez l'outil Audio pour en ajouter une
+              <View style={{ width: Math.max(Dimensions.get('window').width, totalDuration * pxPerSecond), flexDirection: 'column' }}>
+                {/* Règle temporelle graduée (Intégrée au scroll) */}
+                <View style={[styles.timeRuler, { paddingLeft: 0, borderBottomWidth: 0.5, borderColor: '#222222' }]}>
+                  {Array.from({ length: Math.ceil(totalDuration / 5) + 2 }).map((_, i) => (
+                    <Text key={i} style={[styles.rulerTime, { width: 5 * pxPerSecond }]}>
+                      {formatTime(i * 5)}
                     </Text>
-                  )}
+                  ))}
+                </View>
+
+                <View style={styles.tracksContainer}>
+                  {/* 1. PISTE VIDÉO SUPÉRIEURE (Canal 1 - Superposition) */}
+                  <View style={[styles.videoTrackRow, { position: 'relative' }]}>
+                    {clips.filter(c => (c.channel || 0) === 1).map((clip) => (
+                      <VideoClipBlock
+                        key={clip.id}
+                        clip={clip}
+                        index={clips.indexOf(clip)}
+                        isActive={selectedClipIndex === clips.indexOf(clip)}
+                        pxPerSecond={pxPerSecond}
+                        onPress={(idx) => {
+                          setSelectedClipIndex(idx);
+                          setSelectedTextIndex(null);
+                        }}
+                        openTransitionMenu={openTransitionMenu}
+                        isLast={true}
+                        isAbsolute={true}
+                      />
+                    ))}
+                  </View>
+
+                  {/* 2. PISTE VIDÉO PRINCIPALE (Canal 0) */}
+                  <View style={[styles.videoTrackRow, { position: 'relative', marginTop: 8 }]}>
+                    {clips.filter(c => (c.channel || 0) === 0).map((clip, index, arr) => (
+                      <VideoClipBlock
+                        key={clip.id}
+                        clip={clip}
+                        index={clips.indexOf(clip)}
+                        isActive={selectedClipIndex === clips.indexOf(clip)}
+                        pxPerSecond={pxPerSecond}
+                        onPress={(idx) => {
+                          setSelectedClipIndex(idx);
+                          setSelectedTextIndex(null);
+                        }}
+                        openTransitionMenu={openTransitionMenu}
+                        isLast={index === arr.length - 1}
+                        isAbsolute={true}
+                      />
+                    ))}
+                  </View>
+
+                  {/* 3. PISTE AUDIO DÉDIÉE (Waveform colorée mémoïsée) */}
+                  <View style={styles.audioTrackRow}>
+                    {audioClips.map((audio) => (
+                      <AudioClipBlockComponent
+                        key={audio.id}
+                        audio={audio}
+                        pxPerSecond={pxPerSecond}
+                      />
+                    ))}
+                    {audioClips.length === 0 && (
+                      <Text style={styles.emptyAudioTrackText}>
+                        Aucune piste audio - Utilisez l'outil Audio pour en ajouter une
+                      </Text>
+                    )}
+                  </View>
                 </View>
               </View>
 
@@ -1762,7 +1943,7 @@ const styles = StyleSheet.create({
   },
   playhead: {
     position: 'absolute',
-    top: 20,
+    top: 0,
     bottom: 0,
     left: Dimensions.get('window').width / 2,
     alignItems: 'center',
