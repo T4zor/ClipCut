@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Animated, Dimensions, ScrollView, Alert, Image, ImageBackground } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { theme } from '../theme';
+import { supabase } from '../services/supabase';
 import AnimatedNeonButton from '../components/AnimatedNeonButton';
 import { styles } from './VideoDashboardScreen.styles';
 import { StorageService, Project } from '../services/StorageService';
@@ -97,9 +98,14 @@ const VideoDashboardScreen = () => {
       {/* En-tête */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Projets</Text>
-        <TouchableOpacity style={styles.proButton}>
-          <Text style={styles.proButtonText}>GET PRO</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => supabase.auth.signOut()} style={{ marginRight: 15 }}>
+            <Text style={{ color: '#888', fontWeight: 'bold' }}>Déconnexion</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.proButton}>
+            <Text style={styles.proButtonText}>GET PRO</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Liste des projets ou État vide */}
