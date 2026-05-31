@@ -70,6 +70,8 @@ const VideoDashboardScreen = () => {
       navigation.navigate('VideoEditor', { projectId: newProject.id });
       setProjectName('');
       setSelectedFormat('9:16');
+    } else {
+      Alert.alert("Nom de projet manquant", "Veuillez entrer un nom pour votre nouveau projet afin de le créer.");
     }
   };
 
