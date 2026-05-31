@@ -5,6 +5,7 @@ import VideoDashboardScreen from '../screens/VideoDashboardScreen';
 import VideoEditorScreen from '../screens/VideoEditorScreen';
 import PhotoDashboardScreen from '../screens/PhotoDashboardScreen';
 import PhotoEditorScreen from '../screens/PhotoEditorScreen';
+import SplashScreen from '../screens/SplashScreen';
 import { theme } from '../theme';
 
 const Tab = createBottomTabNavigator();
@@ -41,9 +42,11 @@ const TabNavigator = () => {
 // Le RootStack contient les Tabs ET les Éditeurs en plein écran
 const AppNavigator = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Splash">
+      <Stack.Screen name="Splash" component={SplashScreen} />
       {/* L'écran principal est notre barre d'onglets */}
       <Stack.Screen name="MainTabs" component={TabNavigator} />
+      <Stack.Screen name="VideoDashboard" component={VideoDashboardScreen} />
       
       {/* Ces écrans s'ouvriront PAR-DESSUS les onglets, les masquant automatiquement ! */}
       <Stack.Screen name="VideoEditor" component={VideoEditorScreen} />

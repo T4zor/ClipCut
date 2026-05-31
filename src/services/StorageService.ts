@@ -1,5 +1,4 @@
-// MOCK EN MÉMOIRE (Fallback car npm n'a pas pu télécharger async-storage)
-// En production connectée, ceci serait remplacé par : import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type Keyframe = {
   time: number; // en secondes
@@ -36,8 +35,11 @@ export type Clip = {
   x?: number;
   y?: number;
   speed?: number; // Vitesse de lecture
+  volume?: number; // Niveau de volume (0.0 à 2.0)
   channel?: number; // Piste/Canal (0 = Piste principale, 1 = Piste superposition)
   startOffset?: number; // Position de début sur la timeline (en secondes)
+  trimStart?: number; // Début rogné (en secondes)
+  originalDuration?: number; // Durée totale d'origine du fichier (en secondes)
 };
 
 export type AudioClip = {
@@ -46,6 +48,10 @@ export type AudioClip = {
   uri: string;
   duration: number;
   startOffset: number; // décalage dans le projet (en secondes)
+  trimStart?: number; // Début rogné (en secondes)
+  originalDuration?: number; // Durée totale d'origine (en secondes)
+  speed?: number; // Vitesse de lecture
+  volume?: number; // Niveau de volume
 };
 
 export type Project = {
@@ -57,7 +63,7 @@ export type Project = {
   lastModified: number;
 };
 
-// Variable en mémoire pour stocker les projets tant que l'app est ouverte
+// Variable en mémoire temporaire (fallback)
 let memoryStorage: Record<string, string> = {};
 const PROJECTS_KEY = '@clipcut_projects';
 
@@ -67,11 +73,19 @@ export const StorageService = {
    */
   async getProjects(): Promise<Project[]> {
     try {
-      const jsonValue = memoryStorage[PROJECTS_KEY];
-      return jsonValue != null ? JSON.parse(jsonValue) : [];
-    } catch (e) {
-      console.error('Erreur lors de la récupération des projets', e);
+      const jsonValue = await AsyncStorage.getItem(PROJECTS_KEY);
+      if (jsonValue != null) {
+        return JSON.parse(jsonValue);
+      }
       return [];
+    } catch (e) {
+      console.error('Erreur lors de la récupération des projets avec AsyncStorage', e);
+      try {
+        const fallback = memoryStorage[PROJECTS_KEY];
+        return fallback ? JSON.parse(fallback) : [];
+      } catch (err) {
+        return [];
+      }
     }
   },
 
@@ -91,7 +105,9 @@ export const StorageService = {
         projects.unshift(project); // Ajoute en premier (plus récent)
       }
 
-      memoryStorage[PROJECTS_KEY] = JSON.stringify(projects);
+      const jsonValue = JSON.stringify(projects);
+      await AsyncStorage.setItem(PROJECTS_KEY, jsonValue);
+      memoryStorage[PROJECTS_KEY] = jsonValue;
     } catch (e) {
       console.error('Erreur lors de la sauvegarde du projet', e);
     }
@@ -117,7 +133,9 @@ export const StorageService = {
     try {
       const projects = await this.getProjects();
       const filtered = projects.filter(p => p.id !== id);
-      memoryStorage[PROJECTS_KEY] = JSON.stringify(filtered);
+      const jsonValue = JSON.stringify(filtered);
+      await AsyncStorage.setItem(PROJECTS_KEY, jsonValue);
+      memoryStorage[PROJECTS_KEY] = jsonValue;
     } catch (e) {
       console.error('Erreur lors de la suppression du projet', e);
     }

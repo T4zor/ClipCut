@@ -1,22 +1,24 @@
 export const theme = {
   colors: {
-    // Fond principal (très sombre, presque noir, inspiré du fond de votre logo)
-    background: '#0a0a0a', 
+    // Fond principal (noir cassé ascendant gris, pour correspondre au fond du logo)
+    background: '#0c0c0e', 
     
     // Fonds secondaires (pour les barres d'outils, la timeline)
-    surface: '#181818',
-    surfaceLight: '#2a2a2a',
+    surface: '#18181c',
+    surfaceLight: '#25252b',
 
     // La couleur d'accentuation tirée de votre logo (Violet fluo)
-    primary: '#8b5cf6', // Un violet vibrant similaire à votre "C" de gauche
+    primary: '#8b5cf6', // Violet vibrant neon
+    primaryDark: '#4c1d95', // Variante sombre du violet pour l'ombre
+    secondary: '#ff2a7a', // Rose neon
     
     // Texte
     text: '#ffffff',
     textSecondary: '#a1a1aa',
 
     // États
-    danger: '#ef4444', // Pour le bouton "Supprimer" ou "Couper"
-    success: '#22c55e',
+    danger: '#ff1e56', 
+    success: '#00ff88',
   },
   spacing: {
     xs: 4,
