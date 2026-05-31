@@ -70,7 +70,6 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 180,
     height: 180,
-    borderRadius: 90, // Un peu d'arrondi si besoin, ou on laisse carré
   }
 });
 
